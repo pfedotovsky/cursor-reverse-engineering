@@ -1,41 +1,38 @@
 # Cursor-Tap
 
-中文 | [English](./README_EN.md)
+[中文](./README.md) | English
 
-Cursor IDE gRPC 中间人流量分析工具。可以解密 TLS、反序列化 protobuf、实时展示 AI 对话产生的RPC请求和响应。
+A tool for intercepting and analyzing Cursor IDE's gRPC traffic. Decrypts TLS, deserializes protobuf, and displays AI conversations in real-time.
 
-![image-20260131181319486](images/image-20260131180724715.png)
+## Why
 
-## 为什么做这个
+Cursor talks to its backend entirely via gRPC (Connect Protocol). The body is binary protobuf. Burp and Fiddler just show unreadable bytes. Cursor doesn't publish proto definitions either.
 
-Cursor 和后端的通信全是 gRPC，走的 Connect Protocol，body 是二进制 protobuf。用 Burp 或 Fiddler 抓到的都是一堆看不懂的二进制。官方也没公开 proto 定义，想看 AI 对话的具体内容很麻烦。
+This tool decrypts traffic into readable JSON and shows each streaming frame in real-time.
 
-这个工具能把流量解密成可读的 JSON，还能实时看到 streaming 的每一帧。
+## How It Works
 
-## 相关文章
+1. **MITM Proxy** - Sits between Cursor and api2.cursor.sh, decrypts TLS with self-signed CA
+2. **Proto Extraction** - Extracts proto definitions from Cursor's JS bundle (`protobuf-es` compiled output)
+3. **Real-time Parsing** - Parses Connect Protocol envelope framing, deserializes each protobuf frame
+4. **WebUI** - Pushes frames via WebSocket, four-panel layout for service tree / calls / frames / details
 
-[Cursor 逆向笔记 1 —— 我是如何拦截解析 Cursor 的 gRPC 通信流量的](./cursor-reverse-notes-1.md)
+## Quick Start
 
-## 原理
-
-1. **MITM 代理**：在 Cursor 和 api2.cursor.sh 之间插一层，用自签 CA 解密 TLS
-2. **Proto 提取**：从 Cursor 客户端的 JS 代码里提取出 proto 定义（藏在 `protobuf-es` 编译产物里）
-3. **实时解析**：解析 Connect Protocol 的 envelope framing，反序列化每一帧 protobuf
-4. **WebUI 展示**：用 WebSocket 实时推送到前端，四栏布局展示服务树、调用列表、帧列表、详情
-
-## 快速开始
-
-### 1. 启动代理
+### 1. Start the Proxy
 
 ```bash
-go run ./cmd/proxy
+g
+o run ./cmd/cursor-tap start --http-parse
 ```
 
-默认监听 `localhost:8080`（HTTP 代理）和 `localhost:9090`（WebUI + WebSocket）。
+Listens on `localhost:8080` (HTTP proxy) and `localhost:9090` (REST API + WebSocket for the dev UI).
 
-### 2. 配置 Cursor
+`--http-parse` enables MITM HTTP/gRPC decoding. Records are written to `<data-dir>/http.jsonl` by default so the UI can load and stream them. You can set another file with `--http-record /path/to/file.jsonl`.
 
-设置环境变量让 Cursor 走代理并信任自签 CA：
+If you start without `--http-parse` and without `--http-record`, the proxy still runs but **the web UI at localhost:3000 stays empty** (nothing is recorded or pushed).
+
+### 2. Configure Cursor
 
 ```bash
 # Windows
@@ -49,9 +46,9 @@ export HTTPS_PROXY=http://localhost:8080
 export NODE_EXTRA_CA_CERTS=/path/to/ca.crt
 ```
 
-CA 证书在首次启动时自动生成，位置是 `~/.cursor-tap/ca.crt`。
+CA certificate is auto-generated at `~/.cursor-tap/ca.crt` on first run.
 
-### 3. 启动 WebUI
+### 3. Start WebUI
 
 ```bash
 cd web
@@ -59,29 +56,33 @@ npm install
 npm run dev
 ```
 
-打开 `http://localhost:3000` 就能看到流量了。
+Open `http://localhost:3000`.
 
-## 项目结构
+## Project Structure
 
 ```
-├── cmd/proxy/          # 代理入口
+├── cmd/cursor-tap/     # Proxy CLI entry point
 ├── internal/
-│   ├── ca/             # CA 证书管理，动态签发
-│   ├── proxy/          # HTTP CONNECT 代理
-│   └── httpstream/     # gRPC 解析核心
-│       ├── grpc.go     # protobuf 反序列化
-│       ├── parser.go   # Connect Protocol 解析
-│       └── recorder.go # 流量记录
-├── cursor_proto/       # 提取出来的 proto 定义
-└── web/                # Next.js 前端
+│   ├── ca/             # CA certificate management
+│   ├── proxy/          # HTTP CONNECT proxy
+│   └── httpstream/     # gRPC parsing core
+├── cursor_proto/       # Extracted proto definitions
+└── web/                # Next.js frontend
 ```
 
-## 能看到什么
+## What You Can See
 
-- `AiService/RunSSE`：AI 对话的主通道，包括 AI 思考、文本生成、工具调用
-- `BidiService/BidiAppend`：用户消息和工具执行结果
-- `AiService/StreamCpp`：代码补全请求和建议
-- `CppService/RecordCppFate`：补全结果的接受/拒绝反馈
-- `AiService/Batch`：用户行为上报
-- 其他几十个 RPC 方法...
+- `AiService/RunSSE` - AI conversation channel (thinking, text, tool calls)
+- `BidiService/BidiAppend` - User messages and tool results
+- `AiService/StreamCpp` - Code completion
+- `CppService/RecordCppFate` - Completion accept/reject feedback
+- `AiService/Batch` - User behavior telemetry
+- And dozens more...
 
+## Disclaimer
+
+For educational and research purposes only.
+
+## Related
+
+Detailed reverse engineering notes: [cursor-true-reverse-notes-1.md](./cursor-true-reverse-notes-1.md) (Chinese)

@@ -131,6 +131,12 @@ func runStart(cmd *cobra.Command, args []string) error {
 		httpRecordFile = expandPath(httpRecordFile)
 	}
 
+	// Web UI and WebSocket only receive traffic when a Recorder exists (server.go).
+	// If the user enabled parsing but did not set a path, persist to the data dir by default.
+	if enableHTTPParsing && httpRecordFile == "" {
+		httpRecordFile = filepath.Join(dataDir, "http.jsonl")
+	}
+
 	// Create config
 	config := types.Config{
 		HTTPPort:          httpPort,

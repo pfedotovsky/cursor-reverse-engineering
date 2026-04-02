@@ -1,0 +1,5 @@
+data/mitmproxy-ca-cert.pem
+data/proxyman_ca.pem
+.DS_Store
+package-lock.json
+response.txt

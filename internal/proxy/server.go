@@ -496,9 +496,13 @@ func (s *Server) startAPIServer() error {
 		http.ServeFile(w, r, s.ca.CertPath())
 	})
 
-	// Register WebSocket and REST API routes if recorder is enabled
-	if s.recorder != nil && s.hub != nil {
-		store := &recorderStore{recorder: s.recorder}
+	// Always expose the WebSocket and records endpoints so the UI can
+	// connect cleanly even when traffic recording is not enabled yet.
+	if s.hub != nil {
+		var store api.RecordStore = emptyRecordStore{}
+		if s.recorder != nil {
+			store = &recorderStore{recorder: s.recorder}
+		}
 		handler := api.NewHandler(s.hub, store)
 		handler.RegisterRoutes(mux)
 		fmt.Printf("[INFO] WebSocket and REST API enabled\n")
@@ -521,6 +525,12 @@ type recorderStore struct {
 
 func (s *recorderStore) GetRecentRecords(limit int) []interface{} {
 	return s.recorder.GetRecentRecords(limit)
+}
+
+type emptyRecordStore struct{}
+
+func (emptyRecordStore) GetRecentRecords(limit int) []interface{} {
+	return []interface{}{}
 }
 
 // isConnectionClosed checks if the error indicates a closed connection.
